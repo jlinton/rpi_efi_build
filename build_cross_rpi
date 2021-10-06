@@ -1,0 +1,96 @@
+#!/bin/bash
+# this script will pull down the repos for the rpi and build them in the local dir.
+# it will also install some prereq packages if it can't find the aarch64 cross compiler
+# to setup the repo run it like:
+#   `build_cross_rpi setup_repo`
+# or for a build
+#   `build_cross_rpi`
+# clean the artifacts (but not the tools)
+#   `build_cross_rpi clean`
+#
+# the output file will be RPI_EFI.fd which should be copied to the sd/etc
+# where the start4/config.txt/etc files are. Most of those files
+# can be sourced from https://github.com/raspberrypi/firmware/tree/master/boot
+# except for maybe the config.txt which is included here as well for giggles.
+# In my case I have an update_machine.sh on the rpi I run from a booted fedora/linux
+# which mounts the sd/fat partition and scp's it from the build machine, 
+# or when I really break things, I move the sd card around as I don't have a
+# SD MUX/etc.
+#
+# First timers should probably sanity check that they can get the machine booting
+# and their serial port dongle works (basically required for developing on this
+# platform, openocd+random jtag probes tend to work too but I mostly never use
+# them). A working serial port will show the EFI menus/etc on the serial
+# port during boot, as well as display the UI on the pi's graphical head.
+#
+# To do that source a working copy from https://github.com/pftf/RPi4/releases/
+#
+# If the system cross compiler isn't found we try to install some packages
+# the list might not be complete, but forms a starting point.
+
+
+# check the readme @ https://github.com/tianocore/edk2-platforms
+FIRST_PARM=$1
+#set -- $0
+shift 1
+
+# Detect a cross compiler:, 
+#export CROSS_COMPILE=`which aarch64-linux-gnu-gcc |cut -d- -f1-3`"-"
+
+# Update where the cross compiler is if pulled from https://releases.linaro.org/components/toolchain/binaries/
+#export CROSS_COMPILE=$HOME/bin/gcc-linaro-6.2.1-2016.11-x86_64_aarch64-linux-gnu/bin/aarch64-linux-gnu-
+#export PATH=$HOME/bin/gcc-linaro-6.2.1-2016.11-x86_64_aarch64-linux-gnu/bin:$PATH:uefi-tool:output
+# otherwise detect it
+which aarch64-linux-gnu-gcc >/dev/null 
+if [[ $? -eq 1 ]]; then
+    # not found try to install a distro provided cross compiler, and various other things the build will need
+    sudo dnf install -y gcc-aarch64-linux-gnu git make dtc acpica-tools gcc g++ binutils openssl-devel
+    if [[ $? -eq 1 ]]; then
+	echo "unable to locate a cross compiler, please edit the script"
+	exit 1
+    fi
+fi
+export CROSS_COMPILE=`which aarch64-linux-gnu-gcc |cut -d- -f1-3`"-"
+export PATH=$PATH:uefi-tool:output
+
+# set some EDK enviroment vars
+export GCC5_AARCH64_PREFIX=aarch64-linux-gnu-
+export BASEDIR=$PWD/edk2
+export WORKSPACE=$PWD
+export PACKAGES_PATH=$WORKSPACE/edk2:$WORKSPACE/edk2-platforms:$WORKSPACE/edk2-non-osi
+
+export NUM_CPUS=$((`getconf _NPROCESSORS_ONLN` + 2))
+
+# specifiy setup_repo on first run to pull the repos
+if [[ "$FIRST_PARM" == "setup_repo" ]]; then
+    git clone https://github.com/tianocore/edk2
+    git clone https://github.com/tianocore/edk2-platforms
+    git clone https://github.com/tianocore/edk2-non-osi
+    cd edk2
+    git submodule init
+    git submodule update
+    cd ..
+    make -C edk2/BaseTools
+
+    # we grab this too, although its not needed...
+    git clone https://git.trustedfirmware.org/TF-A/trusted-firmware-a.git
+    echo "ok, rerun without setup_repo"
+    exit 0
+fi
+
+if [[ "$FIRST_PARM" == "clean" ]]; then
+    echo "cleaning"
+    rm -rf Build
+#    make -C edk2/BaseTools clean
+    make -C edk2/BaseTools
+fi
+
+source edk2/edksetup.sh
+export DEBUGPRINT="-D DEBUG_PRINT_ERROR_LEVEL=0x8000004F"
+
+# build a big/slow debug image
+build -n$NUM_CPUS $DEBUGPRINT -DSECURE -DSECURE_BOOT_ENABLE=TRUE -a AARCH64 -t GCC5 -b DEBUG -p edk2-platforms/Platform/RaspberryPi/RPi4/RPi4.dsc
+# swap in release for a faster boot, but whats the point here again, just upstream your patches and get it from pftf!
+#build -n$NUM_CPUS -a AARCH64 -t GCC5 -b RELEASE -p edk2-platforms/Platform/RaspberryPi/RPi4/RPi4.dsc
+
+

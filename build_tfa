@@ -1,0 +1,38 @@
+#!/bin/bash
+# This script isn't needed.
+# It builds a TFA image that the uefi firmware uses. By default
+# a binary version of this is already checked into the edk2-non-osi
+# repo. 
+#
+# But, if you want to rebuild TFA this is how I do it. This builds
+# TFA and overwrites the version in the edk-non-osi repo. It should
+# be run before the build_cross_rpi script.
+#
+# I'm running some horribly old linaro cross compilers for this because there
+# were problems in the past, and I've never bothered to see if the newer compilers
+# work. They are here https://releases.linaro.org/components/toolchain/binaries/
+# although the latest linaro page tells you to get them from arm, where you won't
+# find anything this old.
+# 
+# basically download the compilers and unzip them in $HOME/bin
+#
+# note the LOG_LEVEL which will generate a chatty binary and add a second
+# or so to the boot process.
+
+CLEAN=0
+if [[ "$1" == "clean" ]]; then
+   CLEAN=1
+fi
+
+export CROSS_COMPILE=$HOME/bin/gcc-linaro-6.2.1-2016.11-x86_64_aarch64-linux-gnu/bin/aarch64-linux-gnu-
+
+cd trusted-firmware-a
+if [[ "$CLEAN" == "1" ]]; then
+   echo "cleaning"
+   rm -rf build/*
+fi
+ make PLAT=rpi4 PRELOADED_BL33_BASE=0x20000 RPI3_PRELOADED_DTB_BASE=0x1f0000 SUPPORT_VFP=1 LOG_LEVEL=50 SMC_PCI_SUPPORT=1 all
+cd -
+
+# overwrite the bl31 image checked into the edk2-non-osi tree
+cp trusted-firmware-a/build/rpi4/release/bl31.bin edk2-non-osi/Platform/RaspberryPi/RPi4/TrustedFirmware/bl31.bin
