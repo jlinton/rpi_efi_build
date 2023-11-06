@@ -24,7 +24,20 @@ if [[ "$1" == "clean" ]]; then
    CLEAN=1
 fi
 
-export CROSS_COMPILE=$HOME/bin/gcc-linaro-6.2.1-2016.11-x86_64_aarch64-linux-gnu/bin/aarch64-linux-gnu-
+# Update where the cross compiler is if pulled from https://releases.linaro.org/components/toolchain/binaries/
+#export CROSS_COMPILE=$HOME/bin/gcc-linaro-6.2.1-2016.11-x86_64_aarch64-linux-gnu/bin/aarch64-linux-gnu-
+# otherwise detect it
+which aarch64-linux-gnu-ar >/dev/null
+if [[ $? -eq 1 ]]; then
+    # not found try to install a distro provided cross compiler, and various other things the build will need
+    sudo dnf install -y gcc-aarch64-linux-gnu git make dtc acpica-tools gcc g++ binutils openssl-devel libuuid-devel
+    if [[ $? -eq 1 ]]; then
+	echo "unable to locate a cross compiler, please edit the script"
+	exit 1
+    fi
+fi
+export CROSS_COMPILE=`which aarch64-linux-gnu-ar |cut -d- -f1-3`"-"
+
 
 cd trusted-firmware-a
 if [[ "$CLEAN" == "1" ]]; then

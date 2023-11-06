@@ -44,7 +44,7 @@ shift 1
 which aarch64-linux-gnu-gcc >/dev/null 
 if [[ $? -eq 1 ]]; then
     # not found try to install a distro provided cross compiler, and various other things the build will need
-    sudo dnf install -y gcc-aarch64-linux-gnu git make dtc acpica-tools gcc g++ binutils openssl-devel
+    sudo dnf install -y gcc-aarch64-linux-gnu git make dtc acpica-tools gcc g++ binutils openssl-devel libuuid-devel
     if [[ $? -eq 1 ]]; then
 	echo "unable to locate a cross compiler, please edit the script"
 	exit 1
